@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 class AppConfig {
   // static const serverBaseUrl = kDebugMode
   //     ? "http://192.168.0.21:8000"

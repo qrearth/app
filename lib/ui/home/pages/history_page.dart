@@ -14,22 +14,17 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   static const _pageSize = 10;
-  final PagingController<int, UserTransactions> _pagingController =
-      PagingController(firstPageKey: 1);
+  int totalPages = 1;
 
-  @override
-  void initState() {
-    super.initState();
-    _pagingController.addPageRequestListener((pageKey) {
-      _fetchHistory(pageKey);
-    });
-  }
+  late final _pagingController = PagingController<int, UserTransactions>(
+      getNextPageKey: (state) =>
+          state.lastPageIsEmpty ? null : state.nextIntPageKey,
+      fetchPage: (pageKey) => _fetchHistory(pageKey));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // title: Text('Home Page'),
         title: const Text('Transactions History'),
       ),
       body: SafePadding(
@@ -54,18 +49,23 @@ class _HistoryPageState extends State<HistoryPage> {
               trailing: Text('Points'),
             ),
             Expanded(
-              child: PagedListView<int, UserTransactions>(
-                pagingController: _pagingController,
-                builderDelegate: PagedChildBuilderDelegate<UserTransactions>(
-                  itemBuilder: (context, item, index) => ListTile(
-                    leading: Text((index + 1).toString()),
-                    title: Text(
-                      "On ${item.timeStamp.day}/${item.timeStamp.month}/${item.timeStamp.year} at ${item.timeStamp.hour}:${item.timeStamp.minute}",
-                    ),
-                    trailing: Text(
-                      item.amount.toString(),
-                      style: TextStyle(
-                        color: item.amount > 0 ? Colors.green : Colors.red,
+              child: PagingListener(
+                controller: _pagingController,
+                builder: (context, state, fetchNextPage) =>
+                    PagedListView<int, UserTransactions>(
+                  state: state,
+                  fetchNextPage: fetchNextPage,
+                  builderDelegate: PagedChildBuilderDelegate<UserTransactions>(
+                    itemBuilder: (context, item, index) => ListTile(
+                      leading: Text((index + 1).toString()),
+                      title: Text(
+                        "On ${item.timeStamp.day}/${item.timeStamp.month}/${item.timeStamp.year} at ${item.timeStamp.hour}:${item.timeStamp.minute}",
+                      ),
+                      trailing: Text(
+                        item.amount.toString(),
+                        style: TextStyle(
+                          color: item.amount > 0 ? Colors.green : Colors.red,
+                        ),
                       ),
                     ),
                   ),
@@ -78,7 +78,7 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  Future<void> _fetchHistory(final int pageKey) async {
+  Future<List<UserTransactions>> _fetchHistory(final int pageKey) async {
     final response = await ApiClient.userTransactions(
       page: pageKey,
       size: _pageSize,
@@ -86,20 +86,15 @@ class _HistoryPageState extends State<HistoryPage> {
 
     if (response.statusCode == HttpStatus.ok) {
       Iterable leaderboardResponse = response.data["items"];
-      int page = response.data["page"];
-      int totalPages = response.data["pages"];
+      totalPages = response.data["pages"];
 
-      List<UserTransactions> transactionsList = List<UserTransactions>.from(
+      final transactionsList = List<UserTransactions>.from(
         leaderboardResponse.map((x) => UserTransactions.fromJson(x)),
       );
 
-      final isLastPage = page == totalPages;
-      if (isLastPage) {
-        _pagingController.appendLastPage(transactionsList);
-      } else {
-        final nextPageKey = page + 1;
-        _pagingController.appendPage(transactionsList, nextPageKey);
-      }
+      return transactionsList;
     }
+
+    return [];
   }
 }

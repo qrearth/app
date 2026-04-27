@@ -16,26 +16,31 @@ class LeaderboardPage extends StatefulWidget {
 }
 
 class _LeaderboardPageState extends State<LeaderboardPage> {
-  int totalUsers = 0;
   static const _pageSize = 10;
+  int totalUsers = 0;
+  int totalPages = 1;
 
-  final PagingController<int, LeaderboardEntry> _pagingController =
-      PagingController(firstPageKey: 1);
+  late final _pagingController = PagingController<int, LeaderboardEntry>(
+      getNextPageKey: (state) =>
+          state.lastPageIsEmpty ? null : state.nextIntPageKey,
+      fetchPage: (pageKey) => _fetchLeaderboard(pageKey));
 
   @override
   void initState() {
     super.initState();
     _fetchTotalUsers();
-    _pagingController.addPageRequestListener((pageKey) {
-      _fetchLeaderboard(pageKey);
-    });
+  }
+
+  @override
+  void dispose() {
+    _pagingController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // title: Text('Home Page'),
         title: const Text('Leaderboards'),
         forceMaterialTransparency: true,
         scrolledUnderElevation: 0,
@@ -63,18 +68,23 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
               trailing: Text('Recycled'),
             ),
             Expanded(
-              child: PagedListView<int, LeaderboardEntry>(
-                pagingController: _pagingController,
-                builderDelegate: PagedChildBuilderDelegate(
-                  itemBuilder: (context, item, index) => Card(
-                    elevation: 0,
-                    color: (item.username == Global.user.username)
-                        ? keyColor.withOpacity(0.5)
-                        : null,
-                    child: ListTile(
-                      leading: Text('${index + 1} / $totalUsers'),
-                      title: Text('@${item.username}'),
-                      trailing: Text(item.redeemedCodeCount.toString()),
+              child: PagingListener(
+                controller: _pagingController,
+                builder: (context, state, fetchNextPage) =>
+                    PagedListView<int, LeaderboardEntry>(
+                  state: state,
+                  fetchNextPage: fetchNextPage,
+                  builderDelegate: PagedChildBuilderDelegate<LeaderboardEntry>(
+                    itemBuilder: (context, item, index) => Card(
+                      elevation: 0,
+                      color: (item.username == Global.user.username)
+                          ? keyColor.withValues(alpha: 0.5)
+                          : null,
+                      child: ListTile(
+                        leading: Text('${index + 1} / $totalUsers'),
+                        title: Text('@${item.username}'),
+                        trailing: Text(item.redeemedCodeCount.toString()),
+                      ),
                     ),
                   ),
                 ),
@@ -86,7 +96,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
     );
   }
 
-  Future<void> _fetchLeaderboard(final int pageKey) async {
+  Future<List<LeaderboardEntry>> _fetchLeaderboard(final int pageKey) async {
     final response = await ApiClient.leaderboard(
       page: pageKey,
       size: _pageSize,
@@ -94,29 +104,25 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
 
     if (response.statusCode == HttpStatus.ok) {
       Iterable leaderboardResponse = response.data["items"];
-      int page = response.data["page"];
-      int totalPages = response.data["pages"];
+      totalPages = response.data["pages"];
 
       List<LeaderboardEntry> leaderboardList = List<LeaderboardEntry>.from(
         leaderboardResponse.map((x) => LeaderboardEntry.fromJson(x)),
       );
 
-      final isLastPage = page == totalPages;
-      if (isLastPage) {
-        _pagingController.appendLastPage(leaderboardList);
-      } else {
-        final nextPageKey = page + 1;
-        _pagingController.appendPage(leaderboardList, nextPageKey);
-      }
+      return leaderboardList;
     }
+
+    return [];
   }
 
   void _fetchTotalUsers() async {
     final response = await ApiClient.totalUsers();
 
     if (response.statusCode == HttpStatus.ok) {
-      totalUsers = response.data;
-      setState(() {});
+      setState(() {
+        totalUsers = response.data;
+      });
     }
   }
 }
